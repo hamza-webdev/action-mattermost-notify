@@ -1,0 +1,129 @@
+# sending-message-to-mattermost-with-php-and-github-actions-1dkc
+
+Pour voir des informations sur n'importe quelle commande,
+ajoutez --helpderrière cette commande. Par exemple envoyer la commande
+php app.php send --help
+Requis sont les messageet urlde votre webhook.
+
+Vous pouvez obtenir l'URL du webhook sur votre instance la plus importante dans les intégrations, puis cliquer sur Webhook entrant, puis ajouter un nouveau et fournir les informations demandées.
+
+Envoi du message
+Lorsque vous avez tout ce dont vous avez besoin (webhook créé), vous pouvez envoyer un message au serveur comme suit
+php app.php send "Hello World from PHP commandline!" --url "https://your-mattermost.url/webhook-id"
+Cool n'est-ce pas ? Mais, j'aime bien si je peux appeler l'application sans phpmot comme suit
+`./action-mattermost-notify send "Hello World from PHP commandline!" --url "https://your-mattermost.url/webhook-id"`
+Ok, faisons ça.
+
+Compresser votre candidature dans un seul fichier
+Dans cette étape, vous apprendrez à compresser votre application PHP dans phar. Vous avez 2 options, lisez le manuel PHP et faites-le à votre façon, ou IMO une façon plus élégante d'utiliser phar-composer .
+
+Tout d'abord, vous devez l'installer.
+wget https://github.com/clue/phar-composer/releases/download/v1.4.0/phar-composer-1.4.0.phar \
+&& chmod +x phar-composer-1.4.0.phar \
+&& mv phar-composer-1.4.0.phar /usr/local/bin/phar-composer
+Pour vérifier la version actuelle, rendez-vous sur la page des versions.
+
+Avant de pouvoir compresser votre application, vous devez apporter de petites modifications à votre fichier de composition. Ajouter "bin": ["app.php"],quelque part dans le fichier composer. Cela indique à phar-composer quel fichier doit appeler lors de l'exécution.
+
+Ok, construisez-le et rendez-le exécutable.
+phar-composer build
+chmod +x action-mattermost-notify.phar
+Après cela, vous pouvez l'appeler comme suit
+./action-mattermost-notify.phar
+Ok, l'application console est terminée et vous pouvez maintenant créer une action GitHub
+
+Créer une action
+La structure du dossier une fois cette partie terminée ressemblera à ce qui suit
+action-mattermost-notify
+├── action.yml # Added this one
+├── app.php
+├── composer.json
+├── composer.lock
+├── Dockerfile # Added this one
+├── entrypoint.sh # Added this one
+├── src
+│   └── SendCommand.php
+└── vendor
+Tout d'abord, vous devez automatiser les étapes ci-dessus, comme construire phar et le rendre exécutable. Vous ne voulez pas avoir de fichiers bin dans votre référentiel git. Pour ce faire, nous utilisons Docker dans ce tutoriel. Créez Dockerfileet mettez-y le contenu suivant :
+# Dockerfile
+# Folloing image has composer-phar preinstaled in it
+FROM ghcr.io/maymeow/php-ci-cd/php-ci-cd:8.1.6-cs-git-psalm AS build-env
+
+WORKDIR /app
+
+COPY . /app
+
+RUN composer install --no-ansi --no-dev --no-interaction --no-plugins --no-progress --optimize-autoloader --no-scripts
+
+RUN phar-composer build && chmod +x action-mattermost-notify.phar
+
+# Use smallest php image
+FROM php:8.1.6-cli-alpine
+
+COPY --from=build-env /app/action-mattermost-notify.phar /usr/local/bin/action-mattermost-notify
+
+COPY --from=build-env /app/entrypoint.sh /entrypoint.sh
+
+RUN action-mattermost-notify list
+
+ENTRYPOINT ["/entrypoint.sh"]
+L'exemple ci-dessus est une construction en plusieurs étapes. Dans l'image de production, vous n'aurez que phar sans codes sources.
+
+Le deuxième fichier que vous devez ajouter est entrypoint.shcelui qui s'exécute lorsque l'image démarre. Créez-le avec le contenu suivant
+#entrypoint.sh
+#!/bin/sh
+
+action-mattermost-notify send "$1" --url "$2" --channel "$3" --username "$5" --icon "$4"
+Enfin, vous devez créer un fichier de configuration d'action qui indique à Github toutes les informations requises sur l'action que vous créez. Il est appelé action.ymlet doit se trouver dans le répertoire racine. Créez-le avec le contenu suivant :
+# action.yml
+name: 'Action Name' #change this to your action name
+author: 'Action Author' # Change this to your
+description: 'Action Description' # change this
+branding:
+  icon: 'command'
+  color: 'purple'
+inputs: # following are all inputs that can be used in this action
+  message:
+    description: 'Enter the message to send to Mattermost'
+    required: true
+  url:
+    description: 'The URL to send the message to'
+    required: true
+  channel:
+    description: 'Enter the channel to send the message to'
+    required: false
+  icon:
+    description: 'Enter the icon to use for the message'
+    required: false
+  username:
+    description: 'Enter the username to use for the message'
+    required: false
+runs: # How this action start?
+  using: 'docker'
+  image: 'Dockerfile'
+  args:
+    - ${{ inputs.message }}
+    - ${{ inputs.url }}
+    - ${{ inputs.channel }}
+    - ${{ inputs.icon }}
+    - ${{ inputs.username }}
+Bon travail! Félicitations, vous lisez ceci jusqu'à la fin. Vous avez maintenant votre propre action Github et vous avez appris à
+
+créer une application console PHP
+comment l'emballer dans un seul fichier Phar
+comment créer une action Github avec PHP
+Comment l'exécuter
+À la toute fin, je vous montrerai comment vous pouvez l'utiliser. Il y a plus d'options sur la façon de l'appeler.
+
+Enregistrez-le sur le marché (via une nouvelle version)
+Appelez-le avec le nom de la branche ou validez le hachage
+Si vous l'avez publié, vous pouvez l'appeler comme suit
+- name: Action Mattermost Notify
+uses: MayMeow/action-mattermost-notify@v1 # Change this to your action
+with:
+  url: ${{ secrets.MATTERMOST_WEBHOOK }}
+  message: "Hello world from ${{ github.repository }}"
+Votre action porte le nom your-github-username/your-action-repository@versionou your-github-username/your-action-repository@branch-nameou your-github-username/your-action-repository@commit-hash. Les deux dernières options ne nécessitent pas que l'action soit enregistrée sur le marché.
+
+À la fin
+Tout le code source est disponible sur mon Github : Action Mattermost notify et Mattermost Action example .

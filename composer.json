@@ -1,0 +1,21 @@
+{
+    "name": "hamzabedwi/action-mattermost-notify",
+    "description": "envoyer des notifications \u0000 Mattermost avec PHP et Github Actions",
+    "license": "MIT",
+    "version": "1.0.0",
+    "autoload": {
+        "psr-4": {
+            "Hamzabedwi\\ActionMattermostNotify\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Hamza BEDOUI",
+            "email": "hamza.bedoui@ausy.fr"
+        }
+    ],
+    "require": {
+        "symfony/http-client": "^6.1",
+        "symfony/console": "^6.1"
+    }
+}
